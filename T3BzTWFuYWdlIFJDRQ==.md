@@ -1,11 +1,24 @@
-## Summary
-A **Remote Code Execution** vulnerability was found in OpsManage, which is a Automated Operations and Maintenance Platform. This vulnerability exists in the file **./apps/api/views/deploy_api.py**. In the `deploy_host_vars()` function, when this handler receives an HTTP POST request, if the **`id`** parameter results in a non-empty SQL query, the **`host_vars`** variable will accept the parameters from the request, passing external data into the `eval()` function for execution, ultimately leading to the vulnerability.
+# BUG_Author
+YiLin Li
 
-## Version
-v3.0.1 ≤ version ≤ v3.0.5
+# Affected version
+v3.0.1 ≤ OpsManage ≤ v3.0.5
 
-## Source Code From
-(OpsManage v3.0.5.tar.gz)[https://github.com/welliamcao/OpsManage/archive/refs/tags/v3.0.5.tar.gz]
+# Vender
+github.com/welliamcao/OpsManage
+
+# Software
+![image](https://github.com/user-attachments/assets/cf835272-cb75-49a8-abf4-ba187b6f9cf4)
+
+# Vulnerability File
+./apps/api/views/deploy_api.py
+
+# Description
+The **OpsManage Automated Management Platform** contains a remote code execution vulnerability. Attackers can bypass parameter validation, allowing OpsManage to remotely execute arbitrary Python code. 
+This vulnerability exists in the file **./apps/api/views/deploy_api.py**. In the `deploy_host_vars()` function, when this handler receives an HTTP POST request, if the **`id`** parameter results in a non-empty SQL query, the **`host_vars`** variable will accept the parameters from the request, passing external data into the `eval()` function for execution, ultimately leading to the vulnerability.
+
+## Status
+Critical
 
 ## Code Analysis
 In the latest version (v3.0.5), it is observed that the function `deploy_host_vars(request, id, format=None)` in the file **/apps/api/views/deploy_api.py** is an API endpoint that accepts both GET and POST requests.
@@ -23,39 +36,39 @@ In the first try..except block, the model Assets queries the **`id`** parameter 
 ![image](https://github.com/user-attachments/assets/b15e8ce6-9e68-42b9-8dac-adadcd16ad1a)<br>
 This check is easy to bypass, and I will explain the bypass method in **Trigger the vulnerability**.<br>
 
-And then, when a POST request is made with the **`host_vars`** parameter, the variable **`host_vars`** will receive its value. The vulnerability is triggered at this point, as the value is then passed to `eval()` for execution as code.
-![image](https://github.com/user-attachments/assets/d291dfdb-184d-41d4-bba2-0a9713d6bd46)
+And then, when a POST request is made with the **`host_vars`** parameter, the variable **`host_vars`** will receive its value. The vulnerability is triggered at this point, as the value is then passed to `eval()` for execution as code.<br>
+![image](https://github.com/user-attachments/assets/d291dfdb-184d-41d4-bba2-0a9713d6bd46)<br>
 
 ## Trigger the vulnerability
 After deploying the environment locally, the process appears quite complex, making it difficult to reproduce the vulnerability. Fortunately, I discovered an official public deployment of the system, so the following process will be carried out on the public deployment.
-![image](https://github.com/user-attachments/assets/73d30fae-db2b-4c68-892e-5baeb821aa79)
+![image](https://github.com/user-attachments/assets/73d30fae-db2b-4c68-892e-5baeb821aa79)<br>
 
 Log in to the system using the demo account and open the user management interface. I have already added a low-privilege, login-only user named 'host' (with the password host123) using the demo account.
-![image](https://github.com/user-attachments/assets/5276db9b-4640-4d43-999e-247adb50b1ad)
+![image](https://github.com/user-attachments/assets/5276db9b-4640-4d43-999e-247adb50b1ad)<br>
 
 Clicking the 🚫 icon on the right of the role shows the assigned permissions for that role. We can see that the 'host' user has no permissions assigned.
-![image](https://github.com/user-attachments/assets/d1f3587d-1075-4d0a-b5f5-06faa21e70df)
+![image](https://github.com/user-attachments/assets/d1f3587d-1075-4d0a-b5f5-06faa21e70df)<br>
 
 Log in to the system using **host:host123** and simultaneously capture the **csrftoken** from the `/login/` endpoint in BurpSuite.
 ![image](https://github.com/user-attachments/assets/0acf6bd4-a3ce-4ce5-bfec-2b8c0e50939b)<br>
-Then, obtain the **sessionid** from any other requests and record them all.
+Then, obtain the **sessionid** from any other requests and record them all.<br>
 
 Since `/api/host/vars/123/` is a Django REST API endpoint, and OpsManage has CSRF filtering enabled by default, if you try to access it directly with the **csrftoken** from `/login/`, you will see the message **'CSRF token missing or incorrect.'**<br>
 ![image](https://github.com/user-attachments/assets/261670ec-4c8c-42f9-84de-8128d785e50b)<br>
 
 I bypassed the middleware check by setting the **X-CSRFTOKEN** request header. Specifically, I set the value of **X-CSRFTOKEN** to match the **csrftoken** from the cookie.<br>
 ![image](https://github.com/user-attachments/assets/d09b3158-64e8-4e65-9682-70490797756d)<br>
-
 It returned a 404 page, which means we have at least entered the endpoint's execution logic. <br>
+
 To obtain a valid **`id`**, I used an enumeration method to check which **`id`** would return a different response.<br>
 ![image](https://github.com/user-attachments/assets/56710a11-2c0f-41fb-94fa-452f3867671d)<br>
-Clearly, those are the ones.  
+Clearly, those are the ones.<br>
 
 I used the `ping` command to verify the effect of command execution. After changing the **`id`** to **10** and adding the **`host_vars`** parameter with Python code, I sent the request.<br>
 ![image](https://github.com/user-attachments/assets/6582dcc8-2a14-45d6-a741-96e4ff462a04)<br>
 In the DNS log, I can see that the domain was requested, which indicates that the code execution was successful.
 
-## Payload
+# Payload
 ```
 POST http://42.194.214.22:8000/api/host/vars/10/ HTTP/1.1
 Host: 42.194.214.22:8000
